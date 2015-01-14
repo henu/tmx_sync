@@ -24,13 +24,22 @@ class TmxFile:
 			})
 		return tilesets
 
-	def getTile(self, tileset_name, tile_idx):
+	def getTileIds(self, tileset_name):
+		for tileset_xml in self.xml.findall('tileset'):
+			if tileset_xml.get('name') == tileset_name:
+				return [int(tile_xml.get('id')) for tile_xml in tileset_xml.findall('tile')]
+		return []
+
+	def getTile(self, tileset_name, tile_id):
 		for tileset_xml in self.xml.findall('tileset'):
 			if tileset_xml.get('name') == tileset_name:
 				tiles_xml = tileset_xml.findall('tile')
-				if tile_idx < len(tiles_xml):
-					tile_xml = tiles_xml[tile_idx]
-				else:
+				tile_xml = None
+				for tile_idx in range(len(tiles_xml)):
+					if int(tiles_xml[tile_idx].get('id')) == tile_id:
+						tile_xml = tiles_xml[tile_idx]
+						break
+				if tile_xml is None:
 					return None
 
 				props_xml = tile_xml.find('properties')
@@ -67,31 +76,43 @@ def main():
 
 	# Now go tiles through from all tilesets, and ensure they are the same
 	for tileset in tilesets:
-		tile_idx = 0
-		while True:
+
+		# Get all tile IDs from this tileset from every TMX file
+		tile_ids_set = set()
+		for tmxfile in tmxfiles:
+			tile_ids_set |= set(tmxfile.getTileIds(tileset['name']))
+
+		# Go all tiles through
+		for tile_id in tile_ids_set:
 			# Get all different instances of this tile
 			tiles = []
 			tiles_users = []
+			total_users = 0
 			for tmxfile in tmxfiles:
-				tile = tmxfile.getTile(tileset['name'], tile_idx)
+				tile = tmxfile.getTile(tileset['name'], tile_id)
 				if tile:
 					if tile not in tiles:
 						tiles.append(tile)
 						tiles_users.append([tmxfile.path])
 					else:
 						tiles_users[tiles.index(tile)].append(tmxfile.path)
-			# If there was no more tiles, then this tileset is ready
-			if len(tiles) == 0:
-				break
+					total_users += 1
 
 			# If there is conflict
 			if len(tiles) > 1:
-				print 'There is a conflict in tile ' + tileset['name'] + '/' + str(tile_idx) + '!'
+				print 'There is a conflict in tile ' + tileset['name'] + '/' + str(tile_id) + '!'
 				for conflict_idx in range(len(tiles)):
 					print str(conflict_idx + 1) + ') ' + json.dumps(tiles[conflict_idx]) + ' used by: ' + ', '.join([os.path.basename(user) for user in tiles_users[conflict_idx]])
 					# TODO: Solve conflict
 
-			tile_idx += 1
+			# If some of maps is missing the tile
+			if total_users != len(tmxfiles):
+				missing = []
+				for tmxfile in tmxfiles:
+					if tile_id not in tmxfile.getTileIds(tileset['name']):
+						missing.append(os.path.basename(tmxfile.path))
+				print 'Tile ' + tileset['name'] + '/' + str(tile_id) + ' is missing from ' + ', '.join(missing) + '!'
+				# TODO: Add missing tiles
 
 	# TODO: Sync terraintypes!
 
