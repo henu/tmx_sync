@@ -9,6 +9,11 @@ class TmxFile:
 	def __init__(self, path):
 		self.path = path
 		self.xml = ElementTree.parse(path)
+		self.changed = False
+
+	def save(self):
+		if self.changed:
+			self.xml.write(self.path)
 
 	def getTilesetsWithoutTiles(self):
 		tilesets = []
@@ -29,6 +34,31 @@ class TmxFile:
 			if tileset_xml.get('name') == tileset_name:
 				return [int(tile_xml.get('id')) for tile_xml in tileset_xml.findall('tile')]
 		return []
+
+	def setTile(self, tileset_name, tile_id, tile):
+		# TODO: Add tileset, if it does not exist!
+		for tileset_xml in self.xml.findall('tileset'):
+			if tileset_xml.get('name') == tileset_name:
+				# Remove possible old tile
+				for tile_xml in tileset_xml.findall('tile'):
+					if int(tile_xml.get('id')) == tile_id:
+						tileset_xml.remove(tile_xml)
+						break
+				# Add new tile
+				tile_xml_attribs = {'id': str(tile_id)}
+				if tile['terrain']:
+					tile_xml_attribs['terrain'] = tile['terrain']
+				tile_xml = ElementTree.SubElement(tileset_xml, 'tile', attrib=tile_xml_attribs)
+				# Add properties of tile
+				if len(tile['properties']) > 0:
+					props_xml = ElementTree.SubElement(tile_xml, 'properties')
+					for key, value in tile['properties'].items():
+						ElementTree.SubElement(props_xml, 'property', attrib={
+							'name': key,
+							'value': value,
+						})
+				self.changed = True
+				break
 
 	def getTile(self, tileset_name, tile_id):
 		for tileset_xml in self.xml.findall('tileset'):
@@ -104,17 +134,42 @@ def main():
 				for conflict_idx in range(len(tiles)):
 					print str(conflict_idx + 1) + ') ' + json.dumps(tiles[conflict_idx]) + ' used by: ' + ', '.join([os.path.basename(user) for user in tiles_users[conflict_idx]])
 					# TODO: Solve conflict
+				print
 
 			# If some of maps is missing the tile
 			if total_users != len(tmxfiles):
 				missing = []
 				for tmxfile in tmxfiles:
 					if tile_id not in tmxfile.getTileIds(tileset['name']):
-						missing.append(os.path.basename(tmxfile.path))
-				print 'Tile ' + tileset['name'] + '/' + str(tile_id) + ' is missing from ' + ', '.join(missing) + '!'
+						missing.append(tmxfile)
+				print 'Tile ' + tileset['name'] + '/' + str(tile_id) + ' is missing from ' + ', '.join([os.path.basename(tmxfile2.path) for tmxfile2 in missing]) + '!'
+
+				# If there is only one variation of tile, then use it
+				if len(tiles) == 1:
+					print 'Fixing automatically...'
+					for tmxfile2 in missing:
+						tmxfile2.setTile(tileset['name'], tile_id, tiles[0])
+				else:
+					print 'Select which tile to use:'
+					# TODO: Offer option to remove the tile from the maps where it is!
+					print '0) nothing'
+					for option in range(len(tiles)):
+						print str(option + 1) + ') ' + json.dumps(tiles[option]) + ' used by: ' + ', '.join([os.path.basename(user) for user in tiles_users[option]])
+					try:
+						choice = int(raw_input('')) - 1
+					except:
+						choice = -1
+					if choice >= 0 and choice < len(tiles):
+						tmxfile2.setTile(tileset['name'], tile_id, tiles[choice])
+				print
+
 				# TODO: Add missing tiles
 
 	# TODO: Sync terraintypes!
+
+	# Finally save TmxFiles
+	for tmxfile in tmxfiles:
+		tmxfile.save()
 
 if __name__ == '__main__':
 	main()
