@@ -46,11 +46,11 @@ class TmxFile:
 						break
 				# Add new tile
 				tile_xml_attribs = {'id': str(tile_id)}
-				if tile['terrain']:
+				if tile.get('terrain'):
 					tile_xml_attribs['terrain'] = tile['terrain']
 				tile_xml = ElementTree.SubElement(tileset_xml, 'tile', attrib=tile_xml_attribs)
 				# Add properties of tile
-				if len(tile['properties']) > 0:
+				if tile.get('properties') and len(tile['properties']) > 0:
 					props_xml = ElementTree.SubElement(tile_xml, 'properties')
 					for key, value in tile['properties'].items():
 						ElementTree.SubElement(props_xml, 'property', attrib={
@@ -105,7 +105,11 @@ def main():
 	# TODO: Make sure tilesets are the same!
 
 	# Now go tiles through from all tilesets, and ensure they are the same
+	quit_and_save = False
 	for tileset in tilesets:
+
+		if quit_and_save:
+			break
 
 		# Get all tile IDs from this tileset from every TMX file
 		tile_ids_set = set()
@@ -145,21 +149,26 @@ def main():
 				print 'Tile ' + tileset['name'] + '/' + str(tile_id) + ' is missing from ' + ', '.join([os.path.basename(tmxfile2.path) for tmxfile2 in missing]) + '!'
 
 				# If there is only one variation of tile, then use it
-				if len(tiles) == 1:
-					print 'Fixing automatically...'
+				print 'Select which tile to use:'
+				# TODO: Offer option to remove the tile from the maps where it is!
+				for option in range(len(tiles)):
+					print str(option + 1) + ') ' + json.dumps(tiles[option]) + ' used by: ' + ', '.join([os.path.basename(user) for user in tiles_users[option]])
+				print 'c) clear this tile from all maps'
+				print 's) skip this tile'
+				print 'q) save and quit'
+				choice_str = raw_input('')
+				if choice_str == 'c':
+					for tmxfile2 in tmxfiles:
+						tmxfile2.setTile(tileset['name'], tile_id, {})
+				if choice_str == 'q':
+					quit_and_save = True
+					break
+				try:
+					choice = int(choice_str) - 1
+				except:
+					choice = -1
+				if choice >= 0 and choice < len(tiles):
 					for tmxfile2 in missing:
-						tmxfile2.setTile(tileset['name'], tile_id, tiles[0])
-				else:
-					print 'Select which tile to use:'
-					# TODO: Offer option to remove the tile from the maps where it is!
-					print '0) nothing'
-					for option in range(len(tiles)):
-						print str(option + 1) + ') ' + json.dumps(tiles[option]) + ' used by: ' + ', '.join([os.path.basename(user) for user in tiles_users[option]])
-					try:
-						choice = int(raw_input('')) - 1
-					except:
-						choice = -1
-					if choice >= 0 and choice < len(tiles):
 						tmxfile2.setTile(tileset['name'], tile_id, tiles[choice])
 				print
 
