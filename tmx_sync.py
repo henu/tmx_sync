@@ -135,9 +135,32 @@ def main():
 			# If there is conflict
 			if len(tiles) > 1:
 				print 'There is a conflict in tile ' + tileset['name'] + '/' + str(tile_id) + '!'
-				for conflict_idx in range(len(tiles)):
-					print str(conflict_idx + 1) + ') ' + json.dumps(tiles[conflict_idx]) + ' used by: ' + ', '.join([os.path.basename(user) for user in tiles_users[conflict_idx]])
-					# TODO: Solve conflict
+				print
+				print 'Select which tile to use:'
+				for option in range(len(tiles)):
+					print str(option + 1) + ') ' + json.dumps(tiles[option]) + ' used by: ' + ', '.join([os.path.basename(user) for user in tiles_users[option]])
+				print 'c) clear this tile from all maps'
+				print 's) skip this tile'
+				print 'q) save and quit'
+				choice_str = raw_input('')
+				if choice_str == 'c':
+					for tmxfile2 in tmxfiles:
+						tmxfile2.setTile(tileset['name'], tile_id, {})
+					print
+					continue
+				if choice_str == 'q':
+					quit_and_save = True
+					break
+				try:
+					choice = int(choice_str) - 1
+				except:
+					choice = -1
+				if choice >= 0 and choice < len(tiles):
+					for tmxfile2 in tmxfiles:
+						if tmxfile2.path not in tiles_users[choice]:
+							tmxfile2.setTile(tileset['name'], tile_id, tiles[choice])
+					print
+					continue
 				print
 
 			# If some of maps is missing the tile
@@ -149,8 +172,8 @@ def main():
 				print 'Tile ' + tileset['name'] + '/' + str(tile_id) + ' is missing from ' + ', '.join([os.path.basename(tmxfile2.path) for tmxfile2 in missing]) + '!'
 
 				# If there is only one variation of tile, then use it
+				print
 				print 'Select which tile to use:'
-				# TODO: Offer option to remove the tile from the maps where it is!
 				for option in range(len(tiles)):
 					print str(option + 1) + ') ' + json.dumps(tiles[option]) + ' used by: ' + ', '.join([os.path.basename(user) for user in tiles_users[option]])
 				print 'c) clear this tile from all maps'
