@@ -15,7 +15,7 @@ class TmxFile:
 		if self.changed:
 			self.xml.write(self.path)
 
-	def getTilesetsWithoutTiles(self):
+	def getTilesets(self):
 		tilesets = []
 		for tileset_xml in self.xml.findall('tileset'):
 			tilesets.append({
@@ -87,6 +87,44 @@ class TmxFile:
 
 		tileset = self.xml.findall('tileset').get(tile_idx, None)
 
+	def getTerrains(self, tileset_name):
+		for tileset_xml in self.xml.findall('tileset'):
+			if tileset_xml.get('name') == tileset_name:
+				result = []
+				terraintypes_xml = tileset_xml.find('terraintypes')
+				if terraintypes_xml is not None:
+					for terraintype_xml in terraintypes_xml.findall('terrain'):
+						result.append(terraintype_xml.get('name'))
+				return result
+		raise RuntimeError('Tileset "' + tileset_name + '" does not exist in ' + self.path)
+
+	def setTerrains(self, tileset_name, terrains):
+		# If terrains does not differ, then do nothing
+		if terrains == self.getTerrains(tileset_name):
+			return
+
+		for tileset_xml in self.xml.findall('tileset'):
+			if tileset_xml.get('name') == tileset_name:
+				terraintypes_xml = tileset_xml.find('terraintypes')
+				if terraintypes_xml is not None:
+					# If old node can be found, then empty it, so it can be used again
+					for terraintype_xml in terraintypes_xml.findall('terrain'):
+						terraintypes_xml.remove(terraintype_xml)
+				else:
+					# Old node was not found, so we need to create a new
+					# one. Tiled does not like if it's done to the end.
+					# TODO: Code this!
+					pass
+
+				# Add terrains
+				for terrain in terrains:
+					ElementTree.SubElement(terraintypes_xml, 'terrain', attrib={
+						'name': terrain,
+						'tile': '-1',
+					})
+				self.changed = True
+				return
+		raise RuntimeError('Tileset "' + tileset_name + '" does not exist in ' + self.path)
 
 def main():
 
@@ -99,17 +137,38 @@ def main():
 	# Make sure all TMX files have same Tilesets, but do not check tiles yet
 	tilesets = []
 	for tmxfile in tmxfiles:
-		for tmxfile_tileset in tmxfile.getTilesetsWithoutTiles():
+		for tmxfile_tileset in tmxfile.getTilesets():
 			if tmxfile_tileset not in tilesets:
 				tilesets.append(tmxfile_tileset)
 	# TODO: Make sure tilesets are the same!
 
-	# Now go tiles through from all tilesets, and ensure they are the same
+	# Now go all tilesets through and sync them
 	quit_and_save = False
 	for tileset in tilesets:
 
 		if quit_and_save:
 			break
+
+		# Gather all terrains
+		all_terrains = []
+		terrain_conflicts_found = False
+		for tmxfile in tmxfiles:
+			terrains = tmxfile.getTerrains(tileset['name'])
+			for terrain_id in range(len(terrains)):
+				terrain = terrains[terrain_id]
+				if terrain_id == len(all_terrains):
+					# A new terrain
+					all_terrains.append(terrain)
+				elif all_terrains[terrain_id] != terrain:
+					# Conflict
+					print 'ERROR: Terrains at #' + str(terrain_id) + ' conflict! ' + all_terrains[terrain_id] + ' vs. ' + terrain
+					# TODO: Instead of error, ask user what to do!
+					terrain_conflicts_found = True
+		if terrain_conflicts_found:
+			raise RuntimeError('Conflicts with terrains found!')
+		# Synchronize terrains
+		for tmxfile in tmxfiles:
+			tmxfile.setTerrains(tileset['name'], all_terrains)
 
 		# Get all tile IDs from this tileset from every TMX file
 		tile_ids_set = set()
