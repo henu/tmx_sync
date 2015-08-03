@@ -40,24 +40,46 @@ class TmxFile:
 		for tileset_xml in self.xml.findall('tileset'):
 			if tileset_xml.get('name') == tileset_name:
 				# Remove possible old tile
+				old_tile = None
 				for tile_xml in tileset_xml.findall('tile'):
 					if int(tile_xml.get('id')) == tile_id:
+						old_tile = self.getTile(tileset_name, tile_id)
 						tileset_xml.remove(tile_xml)
 						break
 				# Add new tile
 				tile_xml_attribs = {'id': str(tile_id)}
+				new_tile_has_non_default_values = False
 				if tile.get('terrain'):
 					tile_xml_attribs['terrain'] = tile['terrain']
-				tile_xml = ElementTree.SubElement(tileset_xml, 'tile', attrib=tile_xml_attribs)
-				# Add properties of tile
+					new_tile_has_non_default_values = True
+				if tile.get('probability') and float(tile['probability']) < 1.0:
+					tile_xml_attribs['probability'] = tile['probability']
+					new_tile_has_non_default_values = True
 				if tile.get('properties') and len(tile['properties']) > 0:
-					props_xml = ElementTree.SubElement(tile_xml, 'properties')
-					for key, value in tile['properties'].items():
-						ElementTree.SubElement(props_xml, 'property', attrib={
-							'name': key,
-							'value': value,
-						})
-				self.changed = True
+					new_tile_has_non_default_values = True
+				# Add tile only if it has non default values
+				if new_tile_has_non_default_values:
+					tile_xml = ElementTree.SubElement(tileset_xml, 'tile', attrib=tile_xml_attribs)
+					# Add properties of tile
+					if tile.get('properties') and len(tile['properties']) > 0:
+						props_xml = ElementTree.SubElement(tile_xml, 'properties')
+						for key, value in tile['properties'].items():
+							ElementTree.SubElement(props_xml, 'property', attrib={
+								'name': key,
+								'value': value,
+							})
+				# Check if tile was changed
+				if not old_tile and new_tile_has_non_default_values:
+					self.changed = True
+				elif old_tile is not None:
+					if old_tile.get('terrain') != tile.get('terrain'):
+						self.changed = True
+					elif float(old_tile.get('probability', 1)) != float(tile.get('probability', 1)):
+						self.changed = True
+					elif old_tile.get('properties', {}) != tile.get('properties', {}):
+						self.changed = True
+					elif not new_tile_has_non_default_values:
+						self.changed = True
 				break
 
 	def getTile(self, tileset_name, tile_id):
@@ -72,16 +94,22 @@ class TmxFile:
 				if tile_xml is None:
 					return None
 
+				result = {}
+
 				props_xml = tile_xml.find('properties')
-				props = {}
 				if props_xml is not None:
+					props = {}
 					for prop_xml in props_xml.findall('property'):
 						props[prop_xml.get('name')] = prop_xml.get('value')
+					result['properties'] = props
 
-				return {
-					'terrain': tile_xml.get('terrain'),
-					'properties': props,
-				}
+				if tile_xml.get('terrain'):
+					result['terrain'] = tile_xml.get('terrain')
+
+				if tile_xml.get('probability'):
+					result['probability'] = tile_xml.get('probability')
+
+				return result
 
 		raise RuntimeError('Tileset "' + tileset_name + '" does not exist in ' + self.path)
 
@@ -230,7 +258,6 @@ def main():
 						missing.append(tmxfile)
 				print 'Tile ' + tileset['name'] + '/' + str(tile_id) + ' is missing from ' + ', '.join([os.path.basename(tmxfile2.path) for tmxfile2 in missing]) + '!'
 
-				# If there is only one variation of tile, then use it
 				print
 				print 'Select which tile to use:'
 				for option in range(len(tiles)):
