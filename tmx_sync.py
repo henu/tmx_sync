@@ -156,6 +156,18 @@ class TmxFile:
         raise RuntimeError('Tileset "' + tileset_name + '" does not exist in ' + self.path)
 
 
+def inputOrAutoAction(auto_actions, problem_hash):
+    auto_action = auto_actions.get(problem_hash)
+    if auto_action:
+        print auto_action + '!'
+        return auto_action
+    action = raw_input('')
+    if len(action) > 0 and action[-1] == '!':
+        action = action[0:-1]
+        auto_actions[problem_hash] = action
+    return action
+
+
 def main():
 
     # File names that should be synced
@@ -171,6 +183,8 @@ def main():
             if tmxfile_tileset not in tilesets:
                 tilesets.append(tmxfile_tileset)
     # TODO: Make sure tilesets are the same!
+
+    auto_actions = {}
 
     # Now go all tilesets through and sync them
     quit_and_save = False
@@ -223,6 +237,10 @@ def main():
 
             # If there is conflict
             if len(tiles) > 1:
+                problem_hash = 'conflict_' + tileset['name']
+                for option in range(len(tiles)):
+                    problem_hash += '_' + '_'.join([os.path.basename(user) for user in tiles_users[option]])
+
                 print 'There is a conflict in tile ' + tileset['name'] + '/' + str(tile_id) + '!'
                 print
                 print 'Select which tile to use:'
@@ -231,7 +249,7 @@ def main():
                 print 'c) clear this tile from all maps'
                 print 's) skip this tile'
                 print 'q) save and quit'
-                choice_str = raw_input('')
+                choice_str = inputOrAutoAction(auto_actions, problem_hash)
                 if choice_str == 'c':
                     for tmxfile2 in tmxfiles:
                         tmxfile2.setTile(tileset['name'], tile_id, {})
@@ -258,6 +276,12 @@ def main():
                 for tmxfile in tmxfiles:
                     if tile_id not in tmxfile.getTileIds(tileset['name']):
                         missing.append(tmxfile)
+
+                problem_hash = 'missing_' + tileset['name']
+                problem_hash += '__' + '_'.join([os.path.basename(tmxfile2.path) for tmxfile2 in missing])
+                for option in range(len(tiles)):
+                    problem_hash += '__' + '_'.join([os.path.basename(user) for user in tiles_users[option]])
+
                 print 'Tile ' + tileset['name'] + '/' + str(tile_id) + ' is missing from ' + ', '.join([os.path.basename(tmxfile2.path) for tmxfile2 in missing]) + '!'
 
                 print
@@ -267,7 +291,7 @@ def main():
                 print 'c) clear this tile from all maps'
                 print 's) skip this tile'
                 print 'q) save and quit'
-                choice_str = raw_input('')
+                choice_str = inputOrAutoAction(auto_actions, problem_hash)
                 if choice_str == 'c':
                     for tmxfile2 in tmxfiles:
                         tmxfile2.setTile(tileset['name'], tile_id, {})
